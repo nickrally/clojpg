@@ -1,12 +1,31 @@
 (ns clojpg.handler
+  (:import org.postgresql.util.PGobject)
   (:require [compojure.handler :as handler]
             [ring.middleware.json :as middleware]
             [ring.util.response :refer :all]
             [clojure.java.jdbc :as sql]
             [compojure.route :as route]
             [compojure.core :refer :all]
+            [clojure.walk :as walk]
+            [cheshire.core :as cheshire :refer :all]
             ))
 
+(defn value-to-json-pgobject [value]
+  (doto (PGobject.)
+    (.setType "jsonb")
+    (.setValue (cheshire/generate-string value))))
+
+(extend-protocol sql/ISQLValue
+  clojure.lang.IPersistentMap
+  (sql-value [value] (value-to-json-pgobject value)))
+(extend-protocol sql/IResultSetReadColumn
+  org.postgresql.util.PGobject
+  (result-set-read-column [pgobj metadata idx]
+    (let [type (.getType pgobj)
+          value (.getValue pgobj)]
+      (if (#{"jsonb" "json"} type)
+        (cheshire/parse-string value true)
+        value))))
 (def db-spec
   (let [config (clojure.edn/read-string (slurp "resources/config.edn"))
         spec (get-in config [:postgres])]
@@ -22,9 +41,7 @@
 (def create-table-sql
   (sql/create-table-ddl :event
                         [:id      "varchar(256)" :primary :key]
-                        [:message "varchar"]
-                        [:rule :varchar]
-                        ))
+                        [:dump :json]))
 
 (try
   (if-not (table-exists? "event")
@@ -49,14 +66,23 @@
       (response (first results)))
     (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true))))
 
-(defn create-new-event [doc]
-  (let [id (uuid)]
-    (let [a-event (assoc doc "id" id)]
-      (try
-        (sql/insert! db-spec :event a-event)
-        (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true))))
-    (get-event id)))
+;(defn create-new-event [doc]
+;  (let [id (uuid)]
+;    (let [e (cheshire/generate-string (into {} (for [[k v] (assoc doc "id" id)] [(keyword k) v])))]
+;      (spit "error.log" (format "\n%s\n" e ) :append true)
+;      (try
+;        (sql/insert! db-spec :event e)
+;        (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true))))
+;    (get-event id)))
 
+(defn create-new-event [doc]
+  (let [e (walk/keywordize-keys doc)
+        id (uuid)]
+    ;(spit "error.log" (format "\n%s\n" e ) :append true)
+      (try
+        (sql/execute! db-spec ["insert into event(id,dump) values(?,?);" id e])
+        (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true)))
+    (get-event id)))
 
 (defn update-event [id doc]
   (let [a-event (assoc doc "id" id)]
