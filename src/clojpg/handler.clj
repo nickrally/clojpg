@@ -66,36 +66,26 @@
       (response (first results)))
     (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true))))
 
-;(defn create-new-event [doc]
-;  (let [id (uuid)]
-;    (let [e (cheshire/generate-string (into {} (for [[k v] (assoc doc "id" id)] [(keyword k) v])))]
-;      (spit "error.log" (format "\n%s\n" e ) :append true)
-;      (try
-;        (sql/insert! db-spec :event e)
-;        (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true))))
-;    (get-event id)))
-
 (defn create-new-event [doc]
   (let [e (walk/keywordize-keys doc)
         id (uuid)]
-    ;(spit "error.log" (format "\n%s\n" e ) :append true)
       (try
         (sql/execute! db-spec ["insert into event(id,dump) values(?,?);" id e])
         (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true)))
     (get-event id)))
 
 (defn update-event [id doc]
-  (let [a-event (assoc doc "id" id)]
+  (let [e (assoc doc "id" id)]
     (try
-      (sql/update! db-spec :event a-event ["id=?" id] )
-      (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true)))
+      (sql/update! db-spec :event e ["id=?" id] )
+      (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true)))
     (get-event id)))
 
 
 (defn delete-event [id]
   (try
     (sql/delete! db-spec :event ["id=?" id])
-    (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true)))
+    (catch Exception exc (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) exc ) :append true)))
   {:status 204})
 
 
