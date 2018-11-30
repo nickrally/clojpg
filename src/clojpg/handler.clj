@@ -52,11 +52,18 @@
 (defn uuid [] (str (java.util.UUID/randomUUID)))
 
 
+;(defn get-all-events []
+;  (try
+;    (response (sql/query db-spec
+;                         (let [results ["select * from event"]]
+;                           (into [] results))))
+;    (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true))))
+
+
 (defn get-all-events []
   (try
-    (response (sql/query db-spec
-                         (let [results ["select * from event"]]
-                           (into [] results))))
+    (let [results (sql/query db-spec ["select * from event"])]
+      (response (into [] results)))
     (catch Exception e (spit "error.log" (format "%s - %s\n" (str(java.time.LocalDateTime/now)) e ) :append true))))
 
 (defn get-event [id]
